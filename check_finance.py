@@ -2,8 +2,9 @@ import os
 import requests
 from fredapi import Fred
 from datetime import datetime
+import sys
 
-# 지표 설정
+# 지표 설정 (검증 완료된 수치)
 INDICATORS = {
     'WALCL': {'name': 'Fed Total Assets (연준총자산)', 'unit': 'T', 'scale_div': 1000000},
     'M2SL': {'name': 'M2 Money Stock (M2 통화량)', 'unit': 'T', 'scale_div': 1000},
@@ -35,18 +36,30 @@ def get_fred_data(fred, ticker):
             sign = "+" if diff >= 0 else ""
             return f"{prev:.2f}%({d_prev}) → {curr:.2f}%({d_curr}) <b>[{sign}{diff:.2f}%]</b>"
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"Error({ticker}): {str(e)}"
 
 def send_msg(token, chat_id, text):
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML", "disable_web_page_preview": True}
-    requests.post(url, json=payload)
+    res = requests.post(url, json=payload)
+    # 발송 실패 시 로그에 상세 이유 출력
+    if not res.ok:
+        print(f"❌ 텔레그램 전송 실패! 응답내용: {res.text}")
+    else:
+        print(f"✅ 메시지 전송 성공 (Chat ID: {chat_id})")
 
 def main():
+    # 환경 변수 로드 확인
+    token = os.environ.get('TELEGRAM_TOKEN')
+    chat_id = os.environ.get('CHAT_ID')
+    api_key = os.environ.get('FRED_API_KEY')
+
+    if not all([token, chat_id, api_key]):
+        print("❌ 에러: GitHub Secrets 설정(TOKEN, CHAT_ID, API_KEY)을 확인하세요.")
+        sys.exit(1)
+
     try:
-        fred = Fred(api_key=os.environ['FRED_API_KEY'])
-        token = os.environ['TELEGRAM_TOKEN']
-        chat_id = os.environ['CHAT_ID']
+        fred = Fred(api_key=api_key)
         now = datetime.now().strftime('%m/%d %H:%M')
 
         # Report 1
@@ -66,10 +79,10 @@ def main():
         m2 += f"• {INDICATORS['SOFR']['name']}: {get_fred_data(fred, 'SOFR')}\n"
         m2 += f"• {INDICATORS['BAMLH0A0HYM2']['name']}: {get_fred_data(fred, 'BAMLH0A0HYM2')}\n"
         send_msg(token, chat_id, m2)
+
     except Exception as e:
-        # 에러 발생 시 텔레그램으로 에러 내용 전송 (디버깅용)
-        send_msg(os.environ['TELEGRAM_TOKEN'], os.environ['CHAT_ID'], f"❌ 시스템 에러 발생: {str(e)}")
+        print(f"❌ 실행 중 오류 발생: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
-
