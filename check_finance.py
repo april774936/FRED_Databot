@@ -20,34 +20,35 @@ INDICATORS = {
     'SOFR': {'name': 'SOFR (담보금리)', 'unit': '%'}
 }
 
-def get_fred_data(fred, ticker, show_pct=False):
+def get_fred_data(fred, ticker, is_liquidity=False):
     try:
         config = INDICATORS.get(ticker)
-        series = fred.get_series(ticker).sort_index().dropna()
-        if series.empty: return "No Data"
+        # MMF 등 주간 데이터 대응을 위해 dropna() 후 최신 2개 추출
+        series = fred.get_series(ticker).dropna().sort_index()
+        
+        if len(series) < 2:
+            return "\n데이터 업데이트 대기 중..."
+
         curr, prev = series.iloc[-1], series.iloc[-2]
         d_curr, d_prev = series.index[-1].strftime('%m/%d'), series.index[-2].strftime('%m/%d')
         diff = curr - prev
         unit = config['unit']
         
-        if unit != "%":
+        if is_liquidity:
+            # [유동성 파트] 날짜 + 변화량 + 퍼센트 표시
             div = config['scale_div']
             c_val, p_val, d_val = curr/div, prev/div, diff/div
             sign = "+" if d_val >= 0 else ""
-            # 데이터 시작 전 줄바꿈 추가
-            res = f"\n{p_val:,.2f}{unit}({d_prev}) → {c_val:,.2f}{unit}({d_curr}) <b>[{sign}{d_val:,.2f}{unit}]</b>"
-            if show_pct and prev != 0:
-                pct = (diff / prev) * 100
-                res += f" <b>({pct:+.2f}%)</b>"
-            return res
+            pct = (diff / prev * 100) if prev != 0 else 0
+            return f"\n{p_val:,.2f}{unit}({d_prev}) → {c_val:,.2f}{unit}({d_curr}) <b>[{sign}{d_val:,.2f}{unit}] ({pct:+.2f}%)</b>"
         else:
-            # 데이터 시작 전 줄바꿈 추가
-            return f"\n{prev:.2f}%({d_prev}) → {curr:.2f}%({d_curr}) <b>[{diff:+.2f}%]</b>"
+            # [금리 파트] 변화량 없이 날짜만 표시 (요청하신 형식)
+            return f"\n{prev:.2f}%({d_prev}) → {curr:.2f}%({d_curr})"
+            
     except Exception as e:
-        return f"\nError({ticker}): {str(e)}"
+        return f"\nError({ticker}): 데이터 불러오기 실패"
 
 def get_fomc_info():
-    # 현재 날짜 기준 다음 FOMC 날짜 계산 (2026-01-28)
     next_fomc = datetime(2026, 1, 28)
     today = datetime.now()
     delta = next_fomc - today
@@ -68,33 +69,9 @@ def main():
         fred = Fred(api_key=api_key)
         now = datetime.now().strftime('%Y-%m-%d %H:%M')
 
-        # Report 1: 유동성 및 은행
+        # Report 1: 유동성 및 은행 (기존 유지)
         m1 = f"💰 <b>Liquidity & Banking (유동성 및 은행)</b>\n"
         m1 += f"<code>Update: {now}</code>\n\n"
-        
         m1 += f"• {INDICATORS['WALCL']['name']}: {get_fred_data(fred, 'WALCL', True)}\n\n"
         m1 += f"• {INDICATORS['M2SL']['name']}: {get_fred_data(fred, 'M2SL', True)}\n\n"
         m1 += f"• {INDICATORS['WMAPNS']['name']}: {get_fred_data(fred, 'WMAPNS', True)}\n\n"
-        m1 += f"• {INDICATORS['WTREGEN']['name']}: {get_fred_data(fred, 'WTREGEN', True)}\n\n"
-        m1 += f"• {INDICATORS['RRPONTSYD']['name']}: {get_fred_data(fred, 'RRPONTSYD', True)}\n\n"
-        m1 += f"• {INDICATORS['DPSACBW027SBOG']['name']}: {get_fred_data(fred, 'DPSACBW027SBOG', True)}\n\n"
-        m1 += f"• {INDICATORS['TOTLL']['name']}: {get_fred_data(fred, 'TOTLL', True)}"
-        send_msg(token, chat_id, m1)
-
-        # Report 2: 금리 및 리스크
-        m2 = f"📈 <b>Rates & Risk (금리 및 리스크)</b>\n"
-        m2 += f"<code>{get_fomc_info()}</code>\n"
-        m2 += f"<code>Update: {now}</code>\n\n"
-        
-        m2 += f"• {INDICATORS['DFEDTARU']['name']}: {get_fred_data(fred, 'DFEDTARU')}\n\n"
-        m2 += f"• {INDICATORS['EFFR']['name']}: {get_fred_data(fred, 'EFFR')}\n\n"
-        m2 += f"• {INDICATORS['SOFR']['name']}: {get_fred_data(fred, 'SOFR')}\n\n"
-        m2 += f"• {INDICATORS['IORB']['name']}: {get_fred_data(fred, 'IORB')}\n\n"
-        m2 += f"• {INDICATORS['DFEDTARL']['name']}: {get_fred_data(fred, 'DFEDTARL')}"
-        send_msg(token, chat_id, m2)
-
-    except Exception as e:
-        print(f"❌ 오류: {e}")
-
-if __name__ == "__main__":
-    main()
