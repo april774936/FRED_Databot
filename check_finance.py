@@ -4,7 +4,7 @@ from fredapi import Fred
 from datetime import datetime
 import sys
 
-# 지표 설정 (국채 금리 및 기준금리 추가)
+# 지표 설정
 INDICATORS = {
     'WALCL': {'name': 'Fed Total Assets (연준총자산)', 'unit': 'T', 'scale_div': 1000000},
     'M2SL': {'name': 'M2 Money Stock (M2 통화량)', 'unit': 'T', 'scale_div': 1000},
@@ -12,16 +12,14 @@ INDICATORS = {
     'RRPONTSYD': {'name': 'Reverse Repo (역레포 잔고)', 'unit': 'B', 'scale_div': 1},
     'DPSACBW027SBOG': {'name': 'Bank Deposits (은행 총예금)', 'unit': 'B', 'scale_div': 1},
     'TOTLL': {'name': 'Bank Loans (은행 총대출)', 'unit': 'B', 'scale_div': 1},
-    'DFEDTARU': {'name': 'Fed Funds Rate (미 기준금리 상단)', 'unit': '%'},
-    'DGS10': {'name': '10Y Treasury (미 국채 10년)', 'unit': '%'},
-    'DGS2': {'name': '2Y Treasury (미 국채 2년)', 'unit': '%'},
+    'DFEDTARU': {'name': 'Fed Funds Target (기준금리 상단)', 'unit': '%'},
+    'DFEDTARL': {'name': 'Fed Funds Target (기준금리 하단)', 'unit': '%'},
     'IORB': {'name': 'IORB (준비금이자)', 'unit': '%'},
     'EFFR': {'name': 'EFFR (실효연방금리)', 'unit': '%'},
-    'SOFR': {'name': 'SOFR (담보금리)', 'unit': '%'},
-    'BAMLH0A0HYM2': {'name': 'HY Spread (하이일드)', 'unit': '%'}
+    'SOFR': {'name': 'SOFR (담보금리)', 'unit': '%'}
 }
 
-def get_fred_data(fred, ticker):
+def get_fred_data(fred, ticker, show_pct=False):
     try:
         config = INDICATORS.get(ticker)
         series = fred.get_series(ticker).sort_index().dropna()
@@ -33,14 +31,25 @@ def get_fred_data(fred, ticker):
         
         if unit != "%":
             div = config['scale_div']
-            curr, prev, diff = curr/div, prev/div, diff/div
-            sign = "+" if diff >= 0 else ""
-            return f"\n{prev:,.2f}{unit}({d_prev}) → {curr:,.2f}{unit}({d_curr}) <b>[{sign}{diff:,.2f}{unit}]</b>"
+            c_val, p_val, d_val = curr/div, prev/div, diff/div
+            sign = "+" if d_val >= 0 else ""
+            res = f"\n{p_val:,.2f}{unit}({d_prev}) → {c_val:,.2f}{unit}({d_curr}) <b>[{sign}{d_val:,.2f}{unit}]</b>"
+            if show_pct and prev != 0:
+                pct = (diff / prev) * 100
+                res += f" <b>({pct:+.2f}%)</b>"
+            return res
         else:
-            sign = "+" if diff >= 0 else ""
-            return f"\n{prev:.2f}%({d_prev}) → {curr:.2f}%({d_curr}) <b>[{sign}{diff:.2f}%]</b>"
+            return f"\n{prev:.2f}%({d_prev}) → {curr:.2f}%({d_curr}) <b>[{diff:+.2f}%]</b>"
     except Exception as e:
         return f"\nError({ticker}): {str(e)}"
+
+def get_fomc_info():
+    # 2026년 첫 FOMC: 1월 28일 (현지시간 기준)
+    next_fomc = datetime(2026, 1, 28)
+    today = datetime.now()
+    delta = next_fomc - today
+    days_left = delta.days if delta.days >= 0 else 0
+    return f"📅 다음 FOMC: 2026-01-28 ({days_left}일 남음)"
 
 def send_msg(token, chat_id, text):
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -49,34 +58,31 @@ def send_msg(token, chat_id, text):
     if not res.ok: print(f"❌ 전송 실패: {res.text}")
 
 def main():
-    token = os.environ.get('TELEGRAM_TOKEN')
-    chat_id = os.environ.get('CHAT_ID')
-    api_key = os.environ.get('FRED_API_KEY')
+    token, chat_id, api_key = os.environ.get('TELEGRAM_TOKEN'), os.environ.get('CHAT_ID'), os.environ.get('FRED_API_KEY')
     if not all([token, chat_id, api_key]): sys.exit(1)
 
     try:
         fred = Fred(api_key=api_key)
         now = datetime.now().strftime('%Y-%m-%d %H:%M')
 
-        # Report 1: Liquidity & Banking
+        # Report 1: 유동성 및 은행 (변동 % 추가)
         m1 = f"💰 <b>Liquidity & Banking (유동성 및 은행)</b>\n<code>Update: {now}</code>\n\n"
-        m1 += f"• {INDICATORS['WALCL']['name']}: {get_fred_data(fred, 'WALCL')}\n\n"
-        m1 += f"• {INDICATORS['M2SL']['name']}: {get_fred_data(fred, 'M2SL')}\n\n"
-        m1 += f"• {INDICATORS['WTREGEN']['name']}: {get_fred_data(fred, 'WTREGEN')}\n\n"
-        m1 += f"• {INDICATORS['RRPONTSYD']['name']}: {get_fred_data(fred, 'RRPONTSYD')}\n\n"
-        m1 += f"• {INDICATORS['DPSACBW027SBOG']['name']}: {get_fred_data(fred, 'DPSACBW027SBOG')}\n\n"
-        m1 += f"• {INDICATORS['TOTLL']['name']}: {get_fred_data(fred, 'TOTLL')}"
+        m1 += f"• {INDICATORS['WALCL']['name']}: {get_fred_data(fred, 'WALCL', True)}\n\n"
+        m1 += f"• {INDICATORS['M2SL']['name']}: {get_fred_data(fred, 'M2SL', True)}\n\n"
+        m1 += f"• {INDICATORS['WTREGEN']['name']}: {get_fred_data(fred, 'WTREGEN', True)}\n\n"
+        m1 += f"• {INDICATORS['RRPONTSYD']['name']}: {get_fred_data(fred, 'RRPONTSYD', True)}\n\n"
+        m1 += f"• {INDICATORS['DPSACBW027SBOG']['name']}: {get_fred_data(fred, 'DPSACBW027SBOG', True)}\n\n"
+        m1 += f"• {INDICATORS['TOTLL']['name']}: {get_fred_data(fred, 'TOTLL', True)}"
         send_msg(token, chat_id, m1)
 
-        # Report 2: Rates & Risk (추가 지표 반영)
-        m2 = f"📈 <b>Rates & Risk (금리 및 리스크)</b>\n<code>Update: {now}</code>\n\n"
+        # Report 2: 금리 및 리스크 (요청하신 구조)
+        m2 = f"📈 <b>Rates & Risk (금리 및 리스크)</b>\n<code>Update: {now}</code>\n"
+        m2 += f"<code>{get_fomc_info()}</code>\n\n"
         m2 += f"• {INDICATORS['DFEDTARU']['name']}: {get_fred_data(fred, 'DFEDTARU')}\n\n"
-        m2 += f"• {INDICATORS['DGS10']['name']}: {get_fred_data(fred, 'DGS10')}\n\n"
-        m2 += f"• {INDICATORS['DGS2']['name']}: {get_fred_data(fred, 'DGS2')}\n\n"
-        m2 += f"• {INDICATORS['IORB']['name']}: {get_fred_data(fred, 'IORB')}\n\n"
         m2 += f"• {INDICATORS['EFFR']['name']}: {get_fred_data(fred, 'EFFR')}\n\n"
         m2 += f"• {INDICATORS['SOFR']['name']}: {get_fred_data(fred, 'SOFR')}\n\n"
-        m2 += f"• {INDICATORS['BAMLH0A0HYM2']['name']}: {get_fred_data(fred, 'BAMLH0A0HYM2')}"
+        m2 += f"• {INDICATORS['IORB']['name']}: {get_fred_data(fred, 'IORB')}\n\n"
+        m2 += f"• {INDICATORS['DFEDTARL']['name']}: {get_fred_data(fred, 'DFEDTARL')}"
         send_msg(token, chat_id, m2)
 
     except Exception as e:
