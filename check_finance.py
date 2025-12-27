@@ -3,79 +3,54 @@ import requests
 from fredapi import Fred
 from datetime import datetime
 
-def get_data_info(fred, ticker, unit_type="B"):
-    """FRED에서 데이터를 가져와 포맷팅하는 함수"""
+def get_info(fred, ticker, unit_type="B"):
     try:
-        series = fred.get_series(ticker).dropna()
-        if series.empty:
-            return None
+        s = fred.get_series(ticker).dropna()
+        curr, prev = s.iloc[-1], s.iloc[-2]
+        d_curr, d_prev = s.index[-1].strftime('%m/%d'), s.index[-2].strftime('%m/%d')
+        diff = curr - prev
         
-        curr_val = series.iloc[-1]
-        prev_val = series.iloc[-2]
-        last_date = series.index[-1].strftime('%m/%d')
-        diff = curr_val - prev_val
-        
-        # 단위 변환 (T: Trillion, B: Billion, %: Percent)
-        if unit_type == "T":
-            curr_val /= 1000000
-            prev_val /= 1000000
-            diff /= 1000000
-            unit = "T"
-        elif unit_type == "B":
-            # FRED의 많은 데이터는 Million 단위로 제공되므로 Billion으로 변환
-            curr_val /= 1000
-            prev_val /= 1000
-            diff /= 1000
-            unit = "B"
-        else:
-            unit = "%"
+        if unit_type == "T": curr, prev, diff, unit = curr/1e6, prev/1e6, diff/1e6, "T"
+        elif unit_type == "B": curr, prev, diff, unit = curr/1e3, prev/1e3, diff/1e3, "B"
+        else: unit = "%"
             
         sign = "+" if diff >= 0 else ""
-        
+        res = f"{prev:,.1f}{unit}({d_prev}) → {curr:,.1f}{unit}({d_curr}) <b>[{sign}{diff:,.1f}{unit}]</b>"
         if unit == "%":
-            return f"{prev_val:.2f}% → {curr_val:.2f}% ({sign}{diff:.2f}%), ({last_date})"
-        else:
-            return f"{prev_val:,.1f}{unit} → {curr_val:,.1f}{unit} ({sign}{diff:,.1f}{unit}), ({last_date})"
-    except:
-        return "데이터 불러오기 실패"
+            res = f"{prev:.2f}%({d_prev}) → {curr:.2f}%({d_curr}) <b>[{sign}{diff:.2f}%]</b>"
+        return res
+    except: return "N/A"
 
-def send_telegram(token, chat_id, text):
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    requests.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"})
+def send_msg(token, chat_id, text):
+    requests.post(f"https://api.telegram.org/bot{token}/sendMessage", 
+                  json={"chat_id": chat_id, "text": text, "parse_mode": "HTML", "disable_web_page_preview": True})
 
 def main():
     fred = Fred(api_key=os.environ['FRED_API_KEY'])
-    token = os.environ['TELEGRAM_TOKEN']
-    chat_id = os.environ['CHAT_ID']
+    token, chat_id = os.environ['TELEGRAM_TOKEN'], os.environ['CHAT_ID']
+    now = datetime.now().strftime('%m/%d %H:%M')
     
-    now_str = datetime.now().strftime('%Y-%m-%d %H:%M')
+    # --- 첫 번째 메시지: 유동성 및 은행 데이터 ---
+    report1 = f"💰 <b>유동성 및 금융 시스템 ({now})</b>\n\n"
+    report1 += f"• 연준자산: {get_info(fred, 'WALCL', 'T')}\n"
+    report1 += f"• M2 통화: {get_info(fred, 'M2SL', 'B')}\n"
+    report1 += f"• TGA잔고: {get_info(fred, 'WTREGEN', 'B')}\n"
+    report1 += f"• 역레포: {get_info(fred, 'RRPONTSYD', 'B')}\n"
+    report1 += f"• 은행예금: {get_info(fred, 'DPSACBW027SBOG', 'B')}\n"
+    report1 += f"• 은행대출: {get_info(fred, 'TOTLL', 'B')}\n\n"
+    report1 += "🔗 <a href='https://fred.stlouisfed.org/graph/?g=1yyY4'>[유동성 차트보기]</a>" # 주요지표 통합링크
+    
+    send_msg(token, chat_id, report1)
 
-    # --- 리포트 1: 거시 유동성 및 통화량 ---
-    msg1 = f"<b>[1. 거시 유동성 및 통화량]</b>\n(업데이트: {now_str})\n\n"
-    msg1 += f"• 연준 총자산 (WALCL): {get_data_info(fred, 'WALCL', 'T')}\n"
-    msg1 += f"• M2 통화량 (M2SL): {get_data_info(fred, 'M2SL', 'B')}\n"
-    msg1 += f"• TGA 잔고 (WTREGEN): {get_data_info(fred, 'WTREGEN', 'B')}\n"
-    msg1 += f"• 역레포 잔액 (RRPONTSYD): {get_data_info(fred, 'RRPONTSYD', 'B')}\n"
-    msg1 += f"• 지급준비금 (WRESBAL): {get_data_info(fred, 'WRESBAL', 'B')}\n"
-    send_telegram(token, chat_id, msg1)
-
-    # --- 리포트 2: 금리 체계 및 리스크 ---
-    # RRP 금리는 RRPONTSYAWARD 티커 사용
-    msg2 = f"<b>[2. 금리 체계 및 신용 리스크]</b>\n\n"
-    msg2 += f"• IORB (준비금이자): {get_data_info(fred, 'IORB', '%')}\n"
-    msg2 += f"• EFFR (실효연방금리): {get_data_info(fred, 'EFFR', '%')}\n"
-    msg2 += f"• SOFR (담보금리): {get_data_info(fred, 'SOFR', '%')}\n"
-    msg2 += f"• RRP 금리 (역레포금리): {get_data_info(fred, 'RRPONTSYAWARD', '%')}\n"
-    msg2 += f"• 하이일드 스프레드: {get_data_info(fred, 'BAMLH0A0HYM2', '%')}\n"
-    send_telegram(token, chat_id, msg2)
-
-    # --- 리포트 3: 은행 및 민간 대출 상태 ---
-    msg3 = f"<b>[3. 은행 및 민간 대출 현황]</b>\n\n"
-    msg3 += f"• 상업은행 총 예금 (DPSACBW027SBOG): {get_data_info(fred, 'DPSACBW027SBOG', 'B')}\n"
-    msg3 += f"• 상업은행 총 대출 (TOTLL): {get_data_info(fred, 'TOTLL', 'B')}\n"
-    msg3 += f"• 민간 부문 대출 (USLPS): {get_data_info(fred, 'USLPS', 'B')}\n"
-    msg3 += "\n※ USLPS는 업데이트 주기가 길 수 있습니다."
-    send_telegram(token, chat_id, msg3)
+    # --- 두 번째 메시지: 금리 및 리스크 ---
+    report2 = f"📈 <b>금리 및 신용 리스크 ({now})</b>\n\n"
+    report2 += f"• IORB: {get_info(fred, 'IORB', '%')}\n"
+    report2 += f"• EFFR: {get_info(fred, 'EFFR', '%')}\n"
+    report2 += f"• SOFR: {get_info(fred, 'SOFR', '%')}\n"
+    report2 += f"• HY스프레드: {get_info(fred, 'BAMLH0A0HYM2', '%')}\n\n"
+    report2 += "🔗 <a href='https://fred.stlouisfed.org/graph/?id=IORB,SOFR,EFFR'>[금리비교 차트보기]</a>"
+    
+    send_msg(token, chat_id, report2)
 
 if __name__ == "__main__":
     main()
