@@ -23,7 +23,7 @@ INDICATORS = {
 def get_fred_data(fred, ticker, is_liquidity=False):
     try:
         config = INDICATORS.get(ticker)
-        # MMF 등 주간 데이터 대응을 위해 dropna() 후 최신 2개 추출
+        # 데이터 공백 제거 및 정렬 (MMF 에러 방지)
         series = fred.get_series(ticker).dropna().sort_index()
         
         if len(series) < 2:
@@ -35,14 +35,14 @@ def get_fred_data(fred, ticker, is_liquidity=False):
         unit = config['unit']
         
         if is_liquidity:
-            # [유동성 파트] 날짜 + 변화량 + 퍼센트 표시
+            # 유동성 파트: 날짜 + 변화량 + 퍼센트
             div = config['scale_div']
             c_val, p_val, d_val = curr/div, prev/div, diff/div
             sign = "+" if d_val >= 0 else ""
             pct = (diff / prev * 100) if prev != 0 else 0
             return f"\n{p_val:,.2f}{unit}({d_prev}) → {c_val:,.2f}{unit}({d_curr}) <b>[{sign}{d_val:,.2f}{unit}] ({pct:+.2f}%)</b>"
         else:
-            # [금리 파트] 변화량 없이 날짜만 표시 (요청하신 형식)
+            # 금리 파트: 요청하신 형식 (변화량 없이 날짜만)
             return f"\n{prev:.2f}%({d_prev}) → {curr:.2f}%({d_curr})"
             
     except Exception as e:
@@ -59,19 +59,46 @@ def send_msg(token, chat_id, text):
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML", "disable_web_page_preview": True}
     res = requests.post(url, json=payload)
-    if not res.ok: print(f"❌ 전송 실패: {res.text}")
+    if not res.ok: 
+        print(f"❌ 전송 실패: {res.text}")
 
 def main():
-    token, chat_id, api_key = os.environ.get('TELEGRAM_TOKEN'), os.environ.get('CHAT_ID'), os.environ.get('FRED_API_KEY')
-    if not all([token, chat_id, api_key]): sys.exit(1)
+    token = os.environ.get('TELEGRAM_TOKEN')
+    chat_id = os.environ.get('CHAT_ID')
+    api_key = os.environ.get('FRED_API_KEY')
+    
+    if not all([token, chat_id, api_key]): 
+        sys.exit(1)
 
     try:
         fred = Fred(api_key=api_key)
         now = datetime.now().strftime('%Y-%m-%d %H:%M')
 
-        # Report 1: 유동성 및 은행 (기존 유지)
+        # Report 1: 유동성 및 은행
         m1 = f"💰 <b>Liquidity & Banking (유동성 및 은행)</b>\n"
         m1 += f"<code>Update: {now}</code>\n\n"
         m1 += f"• {INDICATORS['WALCL']['name']}: {get_fred_data(fred, 'WALCL', True)}\n\n"
         m1 += f"• {INDICATORS['M2SL']['name']}: {get_fred_data(fred, 'M2SL', True)}\n\n"
         m1 += f"• {INDICATORS['WMAPNS']['name']}: {get_fred_data(fred, 'WMAPNS', True)}\n\n"
+        m1 += f"• {INDICATORS['WTREGEN']['name']}: {get_fred_data(fred, 'WTREGEN', True)}\n\n"
+        m1 += f"• {INDICATORS['RRPONTSYD']['name']}: {get_fred_data(fred, 'RRPONTSYD', True)}\n\n"
+        m1 += f"• {INDICATORS['DPSACBW027SBOG']['name']}: {get_fred_data(fred, 'DPSACBW027SBOG', True)}\n\n"
+        m1 += f"• {INDICATORS['TOTLL']['name']}: {get_fred_data(fred, 'TOTLL', True)}"
+        send_msg(token, chat_id, m1)
+
+        # Report 2: 금리 및 리스크
+        m2 = f"📈 <b>Rates & Risk (금리 및 리스크)</b>\n"
+        m2 += f"{get_fomc_info()}\n\n"
+        
+        m2 += f"• {INDICATORS['DFEDTARU']['name']}: {get_fred_data(fred, 'DFEDTARU', False)}\n\n"
+        m2 += f"• {INDICATORS['EFFR']['name']}: {get_fred_data(fred, 'EFFR', False)}\n\n"
+        m2 += f"• {INDICATORS['SOFR']['name']}: {get_fred_data(fred, 'SOFR', False)}\n\n"
+        m2 += f"• {INDICATORS['IORB']['name']}: {get_fred_data(fred, 'IORB', False)}\n\n"
+        m2 += f"• {INDICATORS['DFEDTARL']['name']}: {get_fred_data(fred, 'DFEDTARL', False)}"
+        send_msg(token, chat_id, m2)
+
+    except Exception as e:
+        print(f"❌ 오류 발생: {e}")
+
+if __name__ == "__main__":
+    main()
