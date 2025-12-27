@@ -1,6 +1,7 @@
 import os
 import requests
 from fredapi import Fred
+from datetime import datetime
 
 def get_finance_data():
     try:
@@ -8,41 +9,75 @@ def get_finance_data():
         token = os.environ['TELEGRAM_TOKEN']
         chat_id = os.environ['CHAT_ID']
         
-        # 지표 설정 (가장 안정적인 티커로 변경)
-        # WALCL: 연준 총자산 (유동성 확인용 추가)
-        # RRPONTSYD: 역레포 (가장 정확한 일간 데이터)
-        # WTREGEN: 재무부 일반계정(TGA)
-        indicators = {
-            'WTREGEN': '🏦 TGA 잔고',
-            'RRPONTSYD': '🔄 역레포(RRP)'
+        # 1. 지표 그룹 설정
+        # 유동성 그룹
+        liquidity = {
+            'WALCL': '🏦 연준 총자산',
+            'WTREGEN': '💰 TGA 잔고',
+            'RRPONTSYD': '🔄 역레포(RRP)',
+            'WRESBAL': '🏦 지급준비금'
+        }
+        # 실물경제 대출 현황 (신규 추가)
+        bank_credit = {
+            'TOTLL': '💳 상업은행 총대출'
+        }
+        # 금리 및 리스크 그룹 (%)
+        rates_risk = {
+            'SOFR': '📈 SOFR(담보금리)',
+            'EFFR': '📉 EFFR(실효연방금리)',
+            'IORB': '💵 IORB(준비금이자)',
+            'BAMLH0A0HYM2': '⚠️ 하이일드 스프레드'
         }
         
-        msg_lines = ["📊 [데일리 유동성 변동 리포트]\n"]
+        msg = f"📊 [데일리 금융지표 리포트] ({datetime.now().strftime('%m/%d')})\n"
         
-        for ticker, name in indicators.items():
-            series = fred.get_series(ticker)
-            
-            # 최신값과 전일값 추출 (데이터가 없는 날을 대비해 마지막 2개 추출)
-            valid_data = series.dropna() # 값이 없는 날짜 제외
-            today_val = valid_data.iloc[-1]
-            yesterday_val = valid_data.iloc[-2]
+        # 2. 유동성 데이터 처리
+        msg += "\n💠 [유동성 현황 (B/T)]"
+        for ticker, name in liquidity.items():
+            series = fred.get_series(ticker).dropna()
+            today_val = series.iloc[-1]
+            yesterday_val = series.iloc[-2]
             diff = today_val - yesterday_val
             
-            unit = "B"
+            if ticker == 'WALCL':
+                unit, factor = "T", 1000000
+            else:
+                unit, factor = "B", 1000
+                
+            today_val /= factor
+            yesterday_val /= factor
+            diff /= factor
+            
             sign = "+" if diff > 0 else ""
-            line = f"{name}: {yesterday_val:,.1f}{unit} → {today_val:,.1f}{unit} ({sign}{diff:,.1f}{unit})"
-            msg_lines.append(line)
+            msg += f"\n• {name}: {today_val:,.1f}{unit} ({sign}{diff:,.1f}{unit})"
+
+        # 3. 실물경제 대출 데이터 처리 (TOTLL)
+        msg += "\n\n💠 [실물경제 대출현황 (B)]"
+        for ticker, name in bank_credit.items():
+            series = fred.get_series(ticker).dropna()
+            today_val = series.iloc[-1] / 1000 # Billion 단위로 변환
+            yesterday_val = series.iloc[-2] / 1000
+            diff = today_val - yesterday_val
+            
+            sign = "+" if diff > 0 else ""
+            msg += f"\n• {name}: {today_val:,.1f}B ({sign}{diff:,.1f}B)"
+
+        # 4. 금리 및 리스크 데이터 처리
+        msg += "\n\n💠 [금리 및 신용리스크 (%)]"
+        for ticker, name in rates_risk.items():
+            series = fred.get_series(ticker).dropna()
+            today_val = series.iloc[-1]
+            yesterday_val = series.iloc[-2]
+            diff = today_val - yesterday_val
+            
+            sign = "+" if diff > 0 else ""
+            msg += f"\n• {name}: {today_val:.2f}% ({sign}{diff:.2f}%)"
+            
+        msg += "\n\n※ FRED 최신 업데이트 기준"
         
-        msg = "\n".join(msg_lines)
-        msg += f"\n\n기준일: {valid_data.index[-1].strftime('%Y-%m-%d')}"
-        
-        # 텔레그램 발송
+        # 5. 텔레그램 발송
         url = f"https://api.telegram.org/bot{token}/sendMessage"
-        response = requests.post(url, json={"chat_id": chat_id, "text": msg})
-        
-        # 텔레그램 자체 에러 확인용 (로그에 찍힘)
-        if response.status_code != 200:
-            print(f"텔레그램 전송 실패: {response.text}")
+        requests.post(url, json={"chat_id": chat_id, "text": msg})
             
     except Exception as e:
         print(f"오류 발생: {e}")
