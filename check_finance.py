@@ -4,11 +4,10 @@ from fredapi import Fred
 from datetime import datetime
 import sys
 
-# 지표 설정
+# 지표 설정 (MMF 제거 완료)
 INDICATORS = {
     'WALCL': {'name': 'Fed Total Assets (연준총자산)', 'unit': 'T', 'scale_div': 1000000},
     'M2SL': {'name': 'M2 Money Stock (M2 통화량)', 'unit': 'T', 'scale_div': 1000},
-    'WMAPNS': {'name': 'MMF Total (MMF 총잔액)', 'unit': 'T', 'scale_div': 1000},
     'WTREGEN': {'name': 'TGA Balance (TGA 잔고)', 'unit': 'B', 'scale_div': 1000},
     'RRPONTSYD': {'name': 'Reverse Repo (역레포 잔고)', 'unit': 'B', 'scale_div': 1},
     'DPSACBW027SBOG': {'name': 'Bank Deposits (은행 총예금)', 'unit': 'B', 'scale_div': 1},
@@ -23,7 +22,7 @@ INDICATORS = {
 def get_fred_data(fred, ticker, is_liquidity=False):
     try:
         config = INDICATORS.get(ticker)
-        # 데이터 공백 제거 및 정렬 (MMF 에러 방지)
+        # 데이터 공백 제거 및 정렬
         series = fred.get_series(ticker).dropna().sort_index()
         
         if len(series) < 2:
@@ -35,14 +34,14 @@ def get_fred_data(fred, ticker, is_liquidity=False):
         unit = config['unit']
         
         if is_liquidity:
-            # 유동성 파트: 날짜 + 변화량 + 퍼센트
+            # 유동성 파트: 이전값(날짜) -> 현재값(날짜) [변화량] (변화율%)
             div = config['scale_div']
             c_val, p_val, d_val = curr/div, prev/div, diff/div
             sign = "+" if d_val >= 0 else ""
             pct = (diff / prev * 100) if prev != 0 else 0
             return f"\n{p_val:,.2f}{unit}({d_prev}) → {c_val:,.2f}{unit}({d_curr}) <b>[{sign}{d_val:,.2f}{unit}] ({pct:+.2f}%)</b>"
         else:
-            # 금리 파트: 요청하신 형식 (변화량 없이 날짜만)
+            # 금리 파트: 이전값%(날짜) -> 현재값%(날짜) (변화량/변화율 제외)
             return f"\n{prev:.2f}%({d_prev}) → {curr:.2f}%({d_curr})"
             
     except Exception as e:
@@ -79,7 +78,6 @@ def main():
         m1 += f"<code>Update: {now}</code>\n\n"
         m1 += f"• {INDICATORS['WALCL']['name']}: {get_fred_data(fred, 'WALCL', True)}\n\n"
         m1 += f"• {INDICATORS['M2SL']['name']}: {get_fred_data(fred, 'M2SL', True)}\n\n"
-        m1 += f"• {INDICATORS['WMAPNS']['name']}: {get_fred_data(fred, 'WMAPNS', True)}\n\n"
         m1 += f"• {INDICATORS['WTREGEN']['name']}: {get_fred_data(fred, 'WTREGEN', True)}\n\n"
         m1 += f"• {INDICATORS['RRPONTSYD']['name']}: {get_fred_data(fred, 'RRPONTSYD', True)}\n\n"
         m1 += f"• {INDICATORS['DPSACBW027SBOG']['name']}: {get_fred_data(fred, 'DPSACBW027SBOG', True)}\n\n"
