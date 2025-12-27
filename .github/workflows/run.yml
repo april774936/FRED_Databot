@@ -2,9 +2,10 @@ name: Daily Update
 
 on:
   schedule:
-    # 한국 시간 기준 매일 밤 10시 (UTC 13:00)
-    - cron: '0 13 * * *'
-  workflow_dispatch: # 직접 'Run workflow' 버튼을 눌러 실행 가능하게 함
+    # 한국 시간 기준 매일 오후 11시 (UTC 14:00)
+    # 오전 11시를 원하시면 '0 2 * * *'로 수정하세요.
+    - cron: '0 14 * * *'
+  workflow_dispatch: # 직접 'Run workflow' 버튼을 눌러 실행 가능
 
 jobs:
   build:
