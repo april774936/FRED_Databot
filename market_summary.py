@@ -72,7 +72,7 @@ def main():
         report += get_data(t, n)
         
     report += "📉 <b>채권 금리 (Point)</b>\n"
-    report += get_data("^IRX", "미 단기 국채 금리", is_bond=True)
+    report += get_data("^IRX", "미 2년물 국채 금리", is_bond=True)
     report += get_data("^TNX", "미 10년물 국채 금리", is_bond=True)
     
     send_telegram_msg(report)
