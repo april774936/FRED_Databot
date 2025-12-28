@@ -16,6 +16,6 @@ jobs:
       - env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}  # 이 줄이 누락되면 "키를 등록해주세요"가 뜹니다.
         run: |
-          # 시간에 따라 시가/종가 리포트 구분 실행
           python market_summary.py
