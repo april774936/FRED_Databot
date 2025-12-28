@@ -8,66 +8,65 @@ def send_telegram_msg(msg):
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     requests.post(url, json={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
 
-def get_data(ticker_symbol, name, is_bond=False):
+def get_data(ticker_symbol, name, is_open_report, is_bond=False):
     backups = {"NQ=F": "QQQ", "ES=F": "SPY", "YM=F": "DIA", "GC=F": "GLD"}
     try:
         ticker = yf.Ticker(ticker_symbol)
         df = ticker.history(period="3mo").dropna()
-        
         if df.empty and ticker_symbol in backups:
-            ticker = yf.Ticker(backups[ticker_symbol])
-            df = ticker.history(period="3mo").dropna()
+            df = yf.Ticker(backups[ticker_symbol]).history(period="3mo").dropna()
         
         if df.empty: return f"• <b>{name}</b>: 데이터 로드 실패 ⚠️\n\n"
         
-        curr, prev = df.iloc[-1], df.iloc[-2]
-        w_df, m_df = df.iloc[max(0, len(df)-6)], df.iloc[max(0, len(df)-21)]
+        curr = df.iloc[-1]
+        prev = df.iloc[-2]
+        w_df = df.iloc[max(0, len(df)-6)]
         
         days = ['월', '화', '수', '목', '금', '토', '일']
         date_label = f"{curr.name.strftime('%m/%d')}({days[curr.name.weekday()]})"
-        c_val = curr['Close']
+        
+        # 장 시작 전 리포트면 '시가(Open)', 장 마감 리포트면 '종가(Close)' 사용
+        price = curr['Open'] if is_open_report else curr['Close']
+        prev_price = prev['Close']
+        
+        diff = price - prev_price
+        pct = (diff / prev_price) * 100
         
         if is_bond:
-            diff = c_val - prev['Close']
             emoji = "📈" if diff >= 0 else "📉"
             res = f"• <b>{name}</b> - {date_label}\n"
-            res += f"  {emoji} {c_val:.2f} (전일대비 {diff:+.2f}p)\n"
-            res += f"  └ 주간: {w_df['Close']:.2f} (변동 {c_val - w_df['Close']:+.2f}p)\n"
-            res += f"  └ 월간: {m_df['Close']:.2f} (변동 {c_val - m_df['Close']:+.2f}p)\n\n"
+            res += f"  {emoji} {price:.2f} (전일대비 {diff:+.2f}p)\n\n"
         else:
-            diff = c_val - prev['Close']
-            pct = (diff / prev['Close']) * 100
-            vol_pct = ((curr['Volume'] - prev['Volume']) / prev['Volume'] * 100) if prev['Volume'] > 0 else 0
-            
-            # 미국식 색상 (상승: 🟢, 하락: 🔴)
             emoji = "🟢" if pct >= 0 else "🔴"
-            
+            label = "현재가(시가)" if is_open_report else "마감가(종가)"
             res = f"{emoji} <b>{name}</b> - {date_label}\n"
-            res += f"  • 현재가: <b>{c_val:,.2f}</b> ({pct:+.2f}%, {diff:+.0f}p)\n"
-            res += f"  • 주간({w_df.name.strftime('%m/%d')}): {((c_val-w_df['Close'])/w_df['Close']*100):+.2f}%\n"
-            res += f"  • 월간({m_df.name.strftime('%m/%d')}): {((c_val-m_df['Close'])/m_df['Close']*100):+.2f}%\n"
-            res += f"  • 거래량: {curr['Volume']:,.0f} ({vol_pct:+.2f}%)\n\n"
+            res += f"  • {label}: <b>{price:,.2f}</b> ({pct:+.2f}%, {diff:+.0f}p)\n"
+            res += f"  • 주간변동: {((price-w_df['Close'])/w_df['Close']*100):+.2f}%\n"
+            if not is_open_report: # 마감 리포트에만 거래량 포함
+                res += f"  • 거래량: {curr['Volume']:,.0f}\n"
+            res += "\n"
         return res
     except:
-        return f"• <b>{name}</b>: 분석 중 오류 발생 ❌\n\n"
+        return f"• <b>{name}</b>: 분석 오류 ❌\n\n"
 
 def main():
-    now_str = datetime.now().strftime('%Y/%m/%d %H:%M')
-    report = f"✨ <b>시장 마감 리포트</b> ({now_str})\n"
+    now = datetime.now()
+    # 한국시간 기준 오후 4시 이후면 '장 시작 전' 리포트로 간주 (UTC 기준으로는 오전 시간)
+    is_open_report = True if now.hour >= 13 or now.hour <= 3 else False
+    
+    title_type = "🚀 장 시작 전 리포트 (시가 기준)" if is_open_report else "🏁 장 마감 리포트 (종가 기준)"
+    now_str = now.strftime('%Y/%m/%d %H:%M')
+    
+    report = f"✨ <b>{title_type}</b>\n({now_str})\n"
     report += "━━━━━━━━━━━━━━━━━━\n\n"
     
-    report += "📊 <b>주요 종목 상세 분석</b>\n\n"
-    targets = [("NQ=F", "나스닥100 선물"), ("ES=F", "S&P500 선물"), 
-               ("YM=F", "다우 선물"), ("GC=F", "금 선물"), ("BTC-USD", "비트코인 현물")]
-    
+    targets = [("NQ=F", "나스닥100"), ("ES=F", "S&P500"), ("YM=F", "다우존스"), ("GC=F", "금 선물"), ("BTC-USD", "비트코인")]
     for t, n in targets:
-        report += get_data(t, n)
+        report += get_data(t, n, is_open_report)
         
-    report += "━━━━━━━━━━━━━━━━━━\n\n"
-    report += "📉 <b>국채 금리 현황 (Point)</b>\n\n"
-    report += get_data("^IRX", "미 단기 국채 금리", is_bond=True)
-    report += get_data("^TNX", "미 10년물 국채 금리", is_bond=True)
-    
+    report += "📉 <b>주요 국채 금리</b>\n\n"
+    report += get_data("^IRX", "미 단기 금리", is_open_report, is_bond=True)
+    report += get_data("^TNX", "미 10년물 금리", is_open_report, is_bond=True)
     report += "━━━━━━━━━━━━━━━━━━"
     
     send_telegram_msg(report)
