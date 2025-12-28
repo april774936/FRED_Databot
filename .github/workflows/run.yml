@@ -1,37 +1,21 @@
 name: Financial Bot
-
 on:
   schedule:
-    - cron: '0 22 * * 1-5' # 한국시간 오전 7시 (화~토)
-    - cron: '0 2 * * 1-5'  # 한국시간 오전 11시 (월~금)
-  workflow_dispatch:      # 수동 실행
-
+    - cron: '30 21 * * 1-5' # 1. 장 마감 리포트: 한국시간 오전 6시 30분 (화~토)
+    - cron: '0 14 * * 1-5'  # 2. 장 시작 전 리포트: 한국시간 오후 11시 (월~금)
+  workflow_dispatch:
 jobs:
   run:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: actions/setup-python@v4
         with:
-          python-version: '3.10' # <--- 여기서 3.9였던 것을 3.10으로 수정했습니다.
-          
-      - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install fredapi requests yfinance pandas
-          
-      - name: Run Scripts
-        env:
+          python-version: '3.10'
+      - run: pip install fredapi requests yfinance pandas
+      - env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
-          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
         run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            python market_summary.py
-            python check_finance.py
-          elif [ "$(date +%H)" == "22" ]; then
-            python market_summary.py
-          else
-            python check_finance.py
-          fi
+          # 시간에 따라 시가/종가 리포트 구분 실행
+          python market_summary.py
