@@ -4,7 +4,7 @@ from fredapi import Fred
 from datetime import datetime
 import sys
 
-# 지표 설정 (예시와 똑같은 단위 적용)
+# 지표 설정
 INDICATORS = {
     'WALCL': {'name': 'Fed Total Assets (연준총자산)', 'unit': 'T', 'scale_div': 1000000},
     'M2SL': {'name': 'M2 Money Stock (M2 통화량)', 'unit': 'T', 'scale_div': 1000},
@@ -23,7 +23,7 @@ def get_fred_data(fred, ticker, is_liquidity=False):
     try:
         config = INDICATORS.get(ticker)
         series = fred.get_series(ticker).dropna().sort_index()
-        if len(series) < 2: return "데이터 업데이트 대기 중..."
+        if len(series) < 2: return "\n데이터 업데이트 대기 중..."
 
         curr, prev = series.iloc[-1], series.iloc[-2]
         d_curr, d_prev = series.index[-1].strftime('%m/%d'), series.index[-2].strftime('%m/%d')
@@ -35,7 +35,7 @@ def get_fred_data(fred, ticker, is_liquidity=False):
             c_val, p_val, d_val = curr/div, prev/div, diff/div
             sign = "+" if d_val >= 0 else ""
             pct = (diff / prev * 100) if prev != 0 else 0
-            # 예시와 똑같은 형식: 수치단위(날짜) → 수치단위(날짜) [+변화량단위] (+변화율%)
+            # 예시와 동일하게 지표명 아래로 줄바꿈 처리
             return f"\n{p_val:,.2f}{unit}({d_prev}) → {c_val:,.2f}{unit}({d_curr}) <b>[{sign}{d_val:,.2f}{unit}] ({pct:+.2f}%)</b>"
         else:
             return f"\n{prev:.2f}%({d_prev}) → {curr:.2f}%({d_curr})"
@@ -50,12 +50,15 @@ def send_msg(token, chat_id, text):
     requests.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": "HTML", "disable_web_page_preview": True})
 
 def main():
-    token, chat_id, api_key = os.environ.get('TELEGRAM_TOKEN'), os.environ.get('CHAT_ID'), os.environ.get('FRED_API_KEY')
+    token = os.environ.get('TELEGRAM_TOKEN')
+    chat_id = os.environ.get('CHAT_ID')
+    api_key = os.environ.get('FRED_API_KEY')
+    
     if not all([token, chat_id, api_key]): sys.exit(1)
     fred = Fred(api_key=api_key)
     now = datetime.now().strftime('%Y-%m-%d %H:%M')
 
-    # 리포트 1: 유동성 (사용자님 예시와 동일한 순서)
+    # 리포트 1: 유동성 (줄바꿈 강화 버전)
     m1 = f"💰 <b>Liquidity & Banking (유동성 및 은행)</b>\nUpdate: {now}\n"
     for t in ['WALCL', 'M2SL', 'WTREGEN', 'RRPONTSYD', 'DPSACBW027SBOG', 'TOTLL']:
         m1 += f"\n• {INDICATORS[t]['name']}: {get_fred_data(fred, t, True)}"
