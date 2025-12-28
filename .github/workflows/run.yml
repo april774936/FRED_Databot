@@ -1,11 +1,12 @@
 name: Financial Bot
 on:
   schedule:
-    # 1. 한국 오전 06:30 (UTC 21:30): 장 마감 시황만 발송
+    # 한국 오전 06:30 (장 마감용) - 이때는 사실 유동성 리포트가 필요 없으므로 
+    # 아래 run 섹션에서 제어하거나, 일단은 테스트를 위해 다 쏘게 둡니다.
     - cron: '30 21 * * 1-5'
-    # 2. 한국 오후 11:00 (UTC 14:00): 유동성 + 금리 + 시황 모두 발송
+    # 한국 오후 11:00 (장 시작 전용)
     - cron: '0 14 * * 1-5'
-  workflow_dispatch:
+  workflow_dispatch: # 수동 실행용
 
 jobs:
   run:
@@ -21,10 +22,6 @@ jobs:
           CHAT_ID: ${{ secrets.CHAT_ID }}
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
         run: |
-          # UTC 14시(한국 23시)일 때만 check_finance.py 실행
-          if [ "$(date +%H)" = "14" ]; then
-            python check_finance.py
-          fi
-          
-          # 시황 리포트는 모든 스케줄에서 실행
+          # 조건문 없이 순서대로 실행 (테스트용)
+          python check_finance.py
           python market_summary.py
