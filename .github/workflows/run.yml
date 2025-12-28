@@ -1,27 +1,35 @@
-name: Financial Bot
+name: Financial Bot Automation
+
 on:
   schedule:
-    # 한국 오전 06:30 (장 마감용) - 이때는 사실 유동성 리포트가 필요 없으므로 
-    # 아래 run 섹션에서 제어하거나, 일단은 테스트를 위해 다 쏘게 둡니다.
-    - cron: '30 21 * * 1-5'
-    # 한국 오후 11:00 (장 시작 전용)
+    # 1. 한국 시간 오후 05:30 (UTC 08:30)
+    - cron: '30 8 * * 1-5' 
+    # 2. 한국 시간 오후 11:00 (UTC 14:00)
     - cron: '0 14 * * 1-5'
-  workflow_dispatch: # 수동 실행용
+  workflow_dispatch: # 수동 실행 버튼
 
 jobs:
-  run:
+  run-bot:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-      - run: pip install fredapi requests yfinance pandas
-      - env:
+
+      - name: Install Dependencies
+        run: |
+          pip install fredapi requests yfinance pandas
+
+      - name: Execute All Reports
+        env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
         run: |
-          # 조건문 없이 순서대로 실행 (테스트용)
+          # 지정된 시간에는 모든 스크립트를 순서대로 실행하여 모든 자료 발송
           python check_finance.py
           python market_summary.py
