@@ -45,7 +45,7 @@ def get_data(ticker_symbol, name, is_bond=False):
             p_vol = prev['Volume']
             vol_pct = ((vol - p_vol) / p_vol * 100) if p_vol > 0 else 0
             
-            emoji = "🟢" if pct < 0 else "🔴"
+            emoji = "🔴" if pct < 0 else "🟢"
             res = f"{emoji} {name} - {date_label}\n"
             res += f"• {c_val:,.2f} (전일대비 {pct:+.2f}%, {diff:+.0f}p)\n"
             res += f"• 주간({w_df.name.strftime('%m/%d')}): {((c_val-w_df['Close'])/w_df['Close']*100):+.2f}%, {c_val-w_df['Close']:+.0f}p\n"
