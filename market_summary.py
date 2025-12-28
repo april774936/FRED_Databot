@@ -24,6 +24,7 @@ def get_fred_data():
 
 def get_data(ticker_symbol, name, is_open_report, is_bond=False):
     try:
+        # 채권 금리 전용 티커 처리
         ticker_to_use = "^2Y" if "2년물" in name else ticker_symbol
         ticker = yf.Ticker(ticker_to_use)
         df = ticker.history(period="3mo").dropna()
@@ -40,16 +41,18 @@ def get_data(ticker_symbol, name, is_open_report, is_bond=False):
         price = curr['Open'] if is_open_report else curr['Close']
         
         diff = price - prev['Close']
-        pct = (diff / prev['Close']) * 100
         
         if is_bond:
+            # 채권 금리용 출력 (퍼센트 변화량 삭제)
             if price > 50: return f"• <b>{name}</b>: 수치 보정 중... ⏳\n\n"
             emoji = "📈" if diff >= 0 else "📉"
             res = f"• <b>{name}</b> - {date_label}\n"
-            res += f"  {emoji} <b>{price:.2f}%</b> (전일대비 {diff:+.2f}p)\n"
-            res += f"  └ 주간: {w_df['Close']:.2f}% ({((price-w_df['Close'])/w_df['Close']*100):+.2f}%, {price-w_df['Close']:+.2f}p)\n"
-            res += f"  └ 월간: {m_df['Close']:.2f}% ({((price-m_df['Close'])/m_df['Close']*100):+.2f}%, {price-m_df['Close']:+.2f}p)\n\n"
+            res += f"  {emoji} <b>{price:.2f}%</b> (전일 {diff:+.2f}p)\n"
+            res += f"  └ 주간: {w_df['Close']:.2f}% ({price-w_df['Close']:+.2f}p)\n"
+            res += f"  └ 월간: {m_df['Close']:.2f}% ({price-m_df['Close']:+.2f}p)\n\n"
         else:
+            # 주식/선물/코인용 출력
+            pct = (diff / prev['Close']) * 100
             emoji = "🟢" if pct >= 0 else "🔴"
             res = f"{emoji} <b>{name}</b> - {date_label}\n"
             res += f"  • 현재가: <b>{price:,.2f}</b> ({pct:+.2f}%, {diff:+.2f}p)\n"
@@ -68,7 +71,7 @@ def main():
     report += "━━━━━━━━━━━━━━━━━━\n\n"
     
     report += "📊 <b>핵심 시장 지표</b>\n\n"
-    for t, n in [("NQ=F", "나스닥100 선물"), ("ES=F", "S&P500 선물"), ("DX-Y.NYB", "달러 인덱스"), ("GC=F", "금 선물"), ("BTC-USD", "비트코인")]:
+    for t, n in [("NQ=F", "나스닥100 선물"), ("ES=F", "S&P500 선물"), ("DX-Y.NYB", "달러 인덱스"), ("GC=F", "금 선물"), ("BTC-USD", "비트코인")] :
         report += get_data(t, n, is_open_report)
         
     report += "📉 <b>국채 수익률 (Yield)</b>\n\n"
