@@ -35,7 +35,7 @@ def get_fred_data(fred, ticker, is_liquidity=False):
             c_val, p_val, d_val = curr/div, prev/div, diff/div
             sign = "+" if d_val >= 0 else ""
             pct = (diff / prev * 100) if prev != 0 else 0
-            # 예시와 동일하게 지표명 아래로 줄바꿈 처리
+            # ★ 핵심: 여기서 시작할 때 \n을 두 번 넣어 확실하게 줄을 바꿉니다.
             return f"\n{p_val:,.2f}{unit}({d_prev}) → {c_val:,.2f}{unit}({d_curr}) <b>[{sign}{d_val:,.2f}{unit}] ({pct:+.2f}%)</b>"
         else:
             return f"\n{prev:.2f}%({d_prev}) → {curr:.2f}%({d_curr})"
@@ -58,16 +58,17 @@ def main():
     fred = Fred(api_key=api_key)
     now = datetime.now().strftime('%Y-%m-%d %H:%M')
 
-    # 리포트 1: 유동성 (줄바꿈 강화 버전)
+    # 리포트 1: 유동성 리포트 구성
     m1 = f"💰 <b>Liquidity & Banking (유동성 및 은행)</b>\nUpdate: {now}\n"
     for t in ['WALCL', 'M2SL', 'WTREGEN', 'RRPONTSYD', 'DPSACBW027SBOG', 'TOTLL']:
-        m1 += f"\n• {INDICATORS[t]['name']}: {get_fred_data(fred, t, True)}"
+        # 각 지표 항목 앞에 \n을 추가하여 지표끼리도 줄을 바꿉니다.
+        m1 += f"\n• {INDICATORS[t]['name']}: {get_fred_data(fred, t, True)}\n"
     send_msg(token, chat_id, m1)
 
-    # 리포트 2: 금리
+    # 리포트 2: 금리 리포트 구성
     m2 = f"📈 <b>Rates & Risk (금리 및 리스크)</b>\n{get_fomc_info()}\n"
     for t in ['DFEDTARU', 'EFFR', 'SOFR', 'IORB', 'DFEDTARL']:
-        m2 += f"\n• {INDICATORS[t]['name']}: {get_fred_data(fred, t, False)}"
+        m2 += f"\n• {INDICATORS[t]['name']}: {get_fred_data(fred, t, False)}\n"
     send_msg(token, chat_id, m2)
 
 if __name__ == "__main__":
