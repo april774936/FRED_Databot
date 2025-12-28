@@ -12,11 +12,11 @@ INDICATORS = {
     'RRPONTSYD': {'name': 'Reverse Repo (역레포 잔고)', 'unit': 'B', 'scale_div': 1},
     'DPSACBW027SBOG': {'name': 'Bank Deposits (은행 총예금)', 'unit': 'B', 'scale_div': 1},
     'TOTLL': {'name': 'Bank Loans (은행 총대출)', 'unit': 'B', 'scale_div': 1},
-    'DFEDTARU': {'name': 'Fed Funds Target (상단)', 'unit': '%'},
+    'DFEDTARU': {'name': 'Fed Funds Target (기준금리 상단)', 'unit': '%'},
     'EFFR': {'name': 'EFFR (실효연방금리)', 'unit': '%'},
     'SOFR': {'name': 'SOFR (담보금리)', 'unit': '%'},
     'IORB': {'name': 'IORB (준비금이자)', 'unit': '%'},
-    'DFEDTARL': {'name': 'Fed Funds Target (하단)', 'unit': '%'}
+    'DFEDTARL': {'name': 'Fed Funds Target (기준금리 하단)', 'unit': '%'}
 }
 
 def get_fred_data(fred, ticker, is_liquidity=False):
@@ -24,12 +24,10 @@ def get_fred_data(fred, ticker, is_liquidity=False):
         config = INDICATORS.get(ticker)
         series = fred.get_series(ticker).dropna().sort_index()
         if len(series) < 2: return "데이터 업데이트 대기 중..."
-
         curr, prev = series.iloc[-1], series.iloc[-2]
         d_curr, d_prev = series.index[-1].strftime('%m/%d'), series.index[-2].strftime('%m/%d')
         diff = curr - prev
         unit = config['unit']
-        
         if is_liquidity:
             div = config['scale_div']
             c_val, p_val, d_val = curr/div, prev/div, diff/div
@@ -38,7 +36,7 @@ def get_fred_data(fred, ticker, is_liquidity=False):
             return f"\n{p_val:,.2f}{unit}({d_prev}) → {c_val:,.2f}{unit}({d_curr}) <b>[{sign}{d_val:,.2f}{unit}] ({pct:+.2f}%)</b>"
         else:
             return f"\n{prev:.2f}%({d_prev}) → {curr:.2f}%({d_curr})"
-    except: return "\n로드 실패"
+    except: return "\n데이터 로드 실패"
 
 def get_fomc_info():
     delta = datetime(2026, 1, 28) - datetime.now()
@@ -55,7 +53,7 @@ def main():
     now = datetime.now().strftime('%Y-%m-%d %H:%M')
 
     # 리포트 1: 유동성
-    m1 = f"💰 <b>Liquidity & Banking (유동성 및 은행)</b>\n<code>Update: {now}</code>\n"
+    m1 = f"💰 <b>Liquidity & Banking (유동성 및 은행)</b>\nUpdate: {now}\n"
     for t in ['WALCL', 'M2SL', 'WTREGEN', 'RRPONTSYD', 'DPSACBW027SBOG', 'TOTLL']:
         m1 += f"\n• {INDICATORS[t]['name']}: {get_fred_data(fred, t, True)}"
     send_msg(token, chat_id, m1)
